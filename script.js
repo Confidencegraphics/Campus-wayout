@@ -711,7 +711,7 @@
       document.getElementById('mapHeading').textContent = 'Campus Map';
     } else {
       mapCard.style.display = 'none';
-      liveMapCard.style.display = '';
+      liveMapCard.style.display = 'block';
       tabSchematic.classList.remove('active');
       tabLive.classList.add('active');
       mapHint.textContent = 'real map · uses your device location';
