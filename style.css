@@ -319,6 +319,7 @@ svg#campusMap{
   overflow:hidden;
   display:none;
 }
+#liveMap{ width:100%; height:100%; min-height:420px; }
 
 .road{
   fill:none;
@@ -475,3 +476,127 @@ svg#campusMap{
 
 /* ---------- Live navigation HUD ---------- */
 #hudStack{
+  position:absolute;
+  top:16px; left:16px; right:16px;
+  z-index:30;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  pointer-events:none;
+}
+#hudStack > *{ pointer-events:auto; }
+#navHud{
+  background: rgba(11,61,46,0.94);
+  color:var(--cream);
+  border-radius: 12px;
+  padding:14px 16px;
+  display:none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+#navHud.show{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+#navHud .navInfo{ flex:1; min-width:160px; }
+#navHud .navTitle{ font-family:'Space Grotesk'; font-weight:700; font-size:14.5px; }
+#navHud .navSub{ font-family:'JetBrains Mono', monospace; font-size:11px; color:rgba(243,235,218,0.65); margin-top:2px; }
+#navHud .navStats{ display:flex; gap:16px; }
+#navHud .navStats .n{ font-family:'Space Grotesk'; font-weight:700; font-size:17px; color:var(--gold); }
+#navHud .navStats .l{ font-size:9.5px; font-family:'JetBrains Mono', monospace; color:rgba(243,235,218,0.55); text-transform:uppercase; }
+#navHud .navBar{
+  width:100%;
+  height:6px;
+  background:rgba(243,235,218,0.15);
+  border-radius:4px;
+  overflow:hidden;
+  margin-top:10px;
+  order:9;
+}
+#navHud .navBarFill{
+  height:100%;
+  width:0%;
+  background: var(--gold);
+  transition: width .4s ease;
+}
+#navHud .navStop{
+  background:rgba(243,235,218,0.14);
+  color:var(--cream);
+  border:none;
+  border-radius:7px;
+  padding:7px 10px;
+  font-family:'Inter'; font-weight:600; font-size:12px;
+  cursor:pointer;
+}
+#navHud.arrived{ background: rgba(212,160,23,0.96); color:var(--green); }
+#navHud.arrived .navSub, #navHud.arrived .navStats .l{ color: rgba(11,61,46,0.65); }
+#navHud.arrived .navStats .n{ color: var(--green); }
+
+#locNotice{
+  background: #fff8e6;
+  border:1px solid #e8d18f;
+  color:#6b5a1c;
+  font-size:12.5px;
+  padding:10px 14px;
+  border-radius:10px;
+  display:none;
+  line-height:1.4;
+}
+#locNotice.show{ display:block; }
+#locNotice button{
+  background:none; border:none; color:var(--green); font-weight:700;
+  cursor:pointer; text-decoration:underline; font-size:12.5px; padding:0; margin-left:4px;
+}
+
+.leaflet-container{ font-family:'Inter', sans-serif; background:#EFEADA; }
+.knust-popup .leaflet-popup-content-wrapper{
+  background: var(--green); color:var(--cream); border-radius:10px;
+}
+.knust-popup .leaflet-popup-tip{ background: var(--green); }
+.popup-name{ font-family:'Space Grotesk'; font-weight:700; font-size:14px; margin-bottom:2px; }
+.popup-cat{ font-family:'JetBrains Mono', monospace; font-size:10.5px; color:var(--gold); margin-bottom:8px; }
+.popup-btn{
+  background: var(--gold); color:var(--green); border:none; border-radius:6px;
+  padding:6px 10px; font-family:'Inter'; font-weight:700; font-size:11.5px; cursor:pointer;
+}
+.you-are-here-dot{
+  width:16px; height:16px; border-radius:50%;
+  background:#2E7DFF; border:3px solid #fff;
+  box-shadow: 0 0 0 4px rgba(46,125,255,0.25);
+}
+.you-are-here-wrap{ position:relative; }
+.you-are-here-pulse{
+  position:absolute; inset:-14px;
+  border-radius:50%;
+  background: rgba(46,125,255,0.35);
+  animation: youpulse 1.8s ease-out infinite;
+}
+@keyframes youpulse{
+  0%{ transform:scale(0.4); opacity:0.6; }
+  100%{ transform:scale(1.6); opacity:0; }
+}
+.walker-dot{
+  width:18px; height:18px; border-radius:50%;
+  background: var(--gold); border:3px solid var(--green);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+}
+
+/* mobile list toggle */
+#mobileToggle{ display:none; }
+@media (max-width:880px){
+  #mobileToggle{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:rgba(243,235,218,0.1);
+    border:1px solid rgba(243,235,218,0.2);
+    color:var(--cream);
+    border-radius:10px;
+    padding:9px 12px;
+    font-family:'Inter'; font-weight:600; font-size:13px;
+    cursor:pointer;
+    margin-bottom:12px;
+  }
+  #list{ display:none; }
+  #sidebar.expanded #list{ display:block; }
+  #mapWrap{ padding:6px 14px 14px; }
+  #mapToolbar{ padding:14px 14px 4px; }
+  #detailPanel{ right:14px; left:14px; width:auto; bottom:14px; }
+  #hudStack{ left:10px; right:10px; top:10px; }
+}
