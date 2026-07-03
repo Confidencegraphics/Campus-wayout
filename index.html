@@ -68,6 +68,11 @@
 
       <!-- Live GPS map -->
       <div id="liveMapCard">
+        <div id="mapLoadError">
+          <strong>The live map couldn't load.</strong>
+          <p>This usually means the map library or tiles didn't reach your browser — check your internet connection.</p>
+          <button id="mapRetryBtn">Retry loading map</button>
+        </div>
         <div id="hudStack">
           <div id="locNotice">
             Location access isn't available, so your live position can't be shown.

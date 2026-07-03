@@ -142,6 +142,7 @@
           activeCats.add(cat.id);
         }
         renderChips(); renderList(); renderMap(); updateLiveMarkersVisibility();
+        if(currentView==='live' && filtersActive()) focusLiveMapOnFiltered();
       });
       chipsEl.appendChild(chip);
     });
@@ -155,6 +156,25 @@
       if(q && !l.name.toLowerCase().includes(q) && !catMap[l.cat].label.toLowerCase().includes(q)) return false;
       return true;
     });
+  }
+  function filtersActive(){
+    return query.trim() !== '' || activeCats.size < CATEGORIES.length;
+  }
+
+  // When search/category filtering narrows the results, bring the live map's
+  // view to match — pan+zoom to a single match, or fit bounds around several.
+  function focusLiveMapOnFiltered(){
+    if(!leafletMap) return;
+    const items = filtered();
+    if(items.length === 0) return;
+    if(items.length === 1){
+      const l = items[0];
+      leafletMap.setView([l.latlng.lat, l.latlng.lng], 18, { animate:true });
+      if(placeMarkers[l.id]) placeMarkers[l.id].openPopup();
+    } else {
+      const bounds = L.latLngBounds(items.map(l => [l.latlng.lat, l.latlng.lng]));
+      leafletMap.fitBounds(bounds, { padding:[70,70], maxZoom:18 });
+    }
   }
 
   /* ---------------- Sidebar list ---------------- */
@@ -285,9 +305,74 @@
   let navTargetId = null;
   let simTimer = null;
   let lastKnownPos = null; // {lat,lng} real or simulated
+  let currentHeadingDeg = 0;
+  let leafletLoadingPromise = null;
 
-  function initLeaflet(){
+  const mapLoadError = document.getElementById('mapLoadError');
+  const mapRetryBtn = document.getElementById('mapRetryBtn');
+
+  function loadScriptOnce(src){
+    return new Promise((resolve, reject)=>{
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if(existing){ existing.addEventListener('load', resolve); existing.addEventListener('error', reject); return; }
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = ()=> resolve();
+      s.onerror = ()=> reject(new Error('Failed to load ' + src));
+      document.head.appendChild(s);
+    });
+  }
+  function loadStyleOnce(href){
+    if(document.querySelector(`link[href="${href}"]`)) return;
+    const l = document.createElement('link');
+    l.rel = 'stylesheet'; l.href = href;
+    document.head.appendChild(l);
+  }
+
+  // Leaflet is requested in <head>, but if that request failed (network hiccup,
+  // blocked request, etc.) we retry from two alternate CDNs before giving up.
+  async function ensureLeafletLoaded(){
+    if(window.L) return true;
+    if(leafletLoadingPromise) { await leafletLoadingPromise; return !!window.L; }
+
+    const sources = [
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js'
+    ];
+    loadStyleOnce('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+
+    leafletLoadingPromise = (async ()=>{
+      for(const src of sources){
+        if(window.L) return;
+        try{ await loadScriptOnce(src); if(window.L) return; }
+        catch(e){ /* try next source */ }
+      }
+    })();
+    await leafletLoadingPromise;
+    leafletLoadingPromise = null;
+    return !!window.L;
+  }
+
+  function showMapLoadError(){
+    mapLoadError.classList.add('show');
+  }
+  function hideMapLoadError(){
+    mapLoadError.classList.remove('show');
+  }
+  mapRetryBtn.addEventListener('click', async ()=>{
+    hideMapLoadError();
+    await initLeaflet();
+    if(leafletMap){ updateLiveMarkersVisibility(); setTimeout(()=> leafletMap.invalidateSize(), 60); }
+  });
+
+  async function initLeaflet(){
     if(leafletMap) return;
+    const ok = await ensureLeafletLoaded();
+    if(!ok || !window.L){
+      showMapLoadError();
+      return;
+    }
+    hideMapLoadError();
     leafletMap = L.map('liveMap', { zoomControl:true, attributionControl:true })
       .setView([GATE_LATLNG.lat, GATE_LATLNG.lng], 17);
 
@@ -342,13 +427,31 @@
     if(!youAreHereMarker){
       const icon = L.divIcon({
         className:'',
-        html:'<div class="you-are-here-wrap"><div class="you-are-here-pulse"></div><div class="you-are-here-dot"></div></div>',
+        html:'<div class="you-are-here-wrap"><div class="you-are-here-pulse"></div><div class="you-are-here-heading"><div class="you-are-here-arrow"></div></div><div class="you-are-here-dot"></div></div>',
         iconSize:[16,16], iconAnchor:[8,8]
       });
       youAreHereMarker = L.marker([latlng.lat, latlng.lng], { icon, zIndexOffset:1000 }).addTo(leafletMap);
     } else {
       youAreHereMarker.setLatLng([latlng.lat, latlng.lng]);
     }
+  }
+
+  function setYouAreHereHeading(deg){
+    if(!youAreHereMarker) return;
+    const el = youAreHereMarker.getElement();
+    if(!el) return;
+    const headingEl = el.querySelector('.you-are-here-heading');
+    if(headingEl) headingEl.style.transform = 'rotate(' + Math.round(deg) + 'deg)';
+  }
+
+  // Bearing in degrees (0=north, 90=east) from point a to point b.
+  function computeBearing(a, b){
+    const toRad = d => d * Math.PI/180, toDeg = r => r * 180/Math.PI;
+    const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLng);
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
   }
 
   function setAccuracyCircle(latlng, radiusM){
@@ -383,7 +486,7 @@
   const navBarFill = document.getElementById('navBarFill');
   const locNotice = document.getElementById('locNotice');
 
-  function startNavigation(id){
+  async function startNavigation(id){
     const loc = LOCATIONS.find(l=>l.id===id);
     if(!loc) return;
     navTargetId = id;
@@ -396,8 +499,9 @@
     navEta.textContent = '—';
     navBarFill.style.width = '0%';
 
-    if(currentView!=='live') switchView('live');
-    if(!leafletMap) initLeaflet();
+    if(currentView!=='live') await switchView('live');
+    if(!leafletMap) await initLeaflet();
+    if(!leafletMap) return; // map failed to load — error banner is already showing
 
     const startPos = lastKnownPos || GATE_LATLNG;
     drawLiveRoute(startPos, loc);
@@ -455,8 +559,19 @@
     watchId = navigator.geolocation.watchPosition(
       (posEvt)=>{
         const pos = { lat: posEvt.coords.latitude, lng: posEvt.coords.longitude };
+
+        // Prefer the device's own heading (available on most phones while moving);
+        // fall back to the bearing between this fix and the last one.
+        if(typeof posEvt.coords.heading === 'number' && !Number.isNaN(posEvt.coords.heading)){
+          currentHeadingDeg = posEvt.coords.heading;
+        } else if(lastKnownPos && latLngDistance(lastKnownPos, pos) > 1){
+          currentHeadingDeg = computeBearing(lastKnownPos, pos);
+        }
+
         lastKnownPos = pos;
         setAccuracyCircle(pos, posEvt.coords.accuracy || 20);
+        ensureYouAreHere(pos);
+        setYouAreHereHeading(currentHeadingDeg);
         updateNavProgress(pos);
       },
       (err)=>{
@@ -472,11 +587,12 @@
     if(navTargetId) simulateWalk(navTargetId);
   });
 
-  function simulateWalk(id){
+  async function simulateWalk(id){
     const loc = LOCATIONS.find(l=>l.id===id);
     if(!loc) return;
-    if(!leafletMap) initLeaflet();
-    if(currentView!=='live') switchView('live');
+    if(currentView!=='live') await switchView('live');
+    if(!leafletMap) await initLeaflet();
+    if(!leafletMap) return; // map failed to load — error banner is already showing
     locNotice.classList.remove('show');
 
     navTargetId = id;
@@ -504,7 +620,7 @@
       step++;
       const frac = Math.min(1, step/totalSteps);
       let distTarget = frac*totalLen;
-      let acc = 0, pos = pts[0];
+      let acc = 0, pos = pts[0], segIndex = 0;
       for(let i=0;i<segLens.length;i++){
         if(acc+segLens[i] >= distTarget){
           const segFrac = segLens[i]===0 ? 0 : (distTarget-acc)/segLens[i];
@@ -512,13 +628,20 @@
             lat: pts[i].lat + (pts[i+1].lat-pts[i].lat)*segFrac,
             lng: pts[i].lng + (pts[i+1].lng-pts[i].lng)*segFrac
           };
+          segIndex = i;
           break;
         }
         acc += segLens[i];
         pos = pts[i+1];
+        segIndex = i;
       }
+      // face the direction of the current road segment
+      const nextPt = pts[segIndex+1] || pts[segIndex];
+      currentHeadingDeg = computeBearing(pos, nextPt);
+
       lastKnownPos = pos;
       ensureYouAreHere(pos);
+      setYouAreHereHeading(currentHeadingDeg);
       updateNavProgress(pos);
 
       if(frac>=1){
@@ -549,7 +672,7 @@
     renderList();
     if(currentView==='schematic') renderMap();
 
-    if(currentView==='live' && placeMarkers[id]){
+    if(currentView==='live' && leafletMap && placeMarkers[id]){
       leafletMap.panTo(placeMarkers[id].getLatLng());
       placeMarkers[id].openPopup();
     }
@@ -577,7 +700,7 @@
   });
 
   /* ---------------- View switching ---------------- */
-  function switchView(view){
+  async function switchView(view){
     currentView = view;
     if(view==='schematic'){
       mapCard.style.display = '';
@@ -593,8 +716,9 @@
       tabLive.classList.add('active');
       mapHint.textContent = 'real map · uses your device location';
       document.getElementById('mapHeading').textContent = 'Live Map';
-      initLeaflet();
+      await initLeaflet();
       updateLiveMarkersVisibility();
+      if(filtersActive()) focusLiveMapOnFiltered();
       setTimeout(()=> leafletMap && leafletMap.invalidateSize(), 60);
     }
     updateDpRouteBtn();
@@ -608,6 +732,7 @@
     renderList();
     if(currentView==='schematic') renderMap();
     updateLiveMarkersVisibility();
+    if(currentView==='live' && filtersActive()) focusLiveMapOnFiltered();
   });
 
   /* ---------------- Mobile toggle ---------------- */
